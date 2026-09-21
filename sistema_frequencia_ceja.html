@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frequência Diária — CEJA Dr. Gerardo Camelo Madeira</title>
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --green:#0b5d3b; --green2:#083f2a; --gold:#d9a900;
+    --bg:#f4f7f5; --card:#fff; --line:#cfd8d3; --text:#1e2521;
+  }
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Times New Roman",Times,serif;font-size:14pt}
+  header{background:var(--green);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px #0002}
+  header h1{margin:0;font-size:20pt;text-align:center}
+  header .sub{text-align:center;margin-top:4px;font-size:12pt}
+  .toolbar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;background:#fff;border-bottom:1px solid var(--line)}
+  select,input,button{font:inherit}
+  select,.year{padding:7px 9px;border:1px solid #9eaaa4;border-radius:6px;background:#fff}
+  button{border:0;border-radius:6px;padding:8px 12px;cursor:pointer}
+  .btn{background:var(--green);color:#fff}
+  .btn.secondary{background:#e6ece9;color:#163c2c}
+  .status{font-size:11pt;padding:5px 10px;border-radius:20px;background:#eef3f0}
+  .status.ok{color:#075c39}.status.err{color:#9b1c1c}
+  .areas{display:flex;gap:7px;padding:10px;overflow:auto;background:#eaf0ed}
+  .area{white-space:nowrap;background:#fff;border:1px solid #b8c7bf;padding:8px 13px;border-radius:20px;cursor:pointer}
+  .area.active{background:var(--green);color:#fff;border-color:var(--green)}
+  .months{display:flex;gap:5px;overflow:auto;padding:8px;background:#fff;border-bottom:1px solid var(--line)}
+  .month{min-width:94px;padding:7px 10px;background:#eef2ef;border:1px solid #c6d0cb;border-radius:5px;cursor:pointer}
+  .month.active{background:#dce9e2;border-color:var(--green);font-weight:bold}
+  .days{display:flex;gap:5px;overflow:auto;padding:8px;background:#f8faf9;border-bottom:1px solid var(--line)}
+  .day{min-width:43px;padding:6px 8px;background:#fff;border:1px solid #c6d0cb;border-radius:5px;cursor:pointer;text-align:center}
+  .day.active{background:var(--green);color:#fff}
+  main{padding:12px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .panel-title{padding:10px 12px;background:#f1f5f2;border-bottom:1px solid var(--line);font-weight:bold}
+  .summary{display:flex;gap:18px;flex-wrap:wrap;padding:10px 12px;background:#fffdf0;border-bottom:1px solid #eadb9b}
+  .summary strong{color:var(--green)}
+  .table-wrap{overflow:auto;max-height:65vh}
+  table{border-collapse:collapse;width:100%;min-width:1420px}
+  th,td{border:1px solid var(--line);padding:5px}
+  th{background:var(--green);color:#fff;position:sticky;top:0;z-index:3;text-align:center}
+  td input[type=text],td input[type=number]{width:100%;border:0;outline:0;background:transparent;padding:4px;font-family:"Times New Roman",Times,serif;font-size:14pt}
+  td input:focus{background:#fffbe5}
+  td.center{text-align:center}
+  .ord{width:52px;text-align:center}
+  .mat{width:115px}.nivel{width:100px}.comp{width:210px}.prof{width:190px}.atividade{width:500px}
+  .atendeu{width:90px;text-align:center}
+  .att{width:23px;height:23px;accent-color:var(--green);cursor:pointer}
+  tr.present{background:#f2fbf5}
+  .footer-note{padding:12px;color:#506057;font-size:11pt}
+  .modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal.open{display:flex}.box{background:#fff;border-radius:10px;padding:20px;max-width:620px;width:100%}
+  .box h2{margin-top:0}.box input{width:100%;padding:9px;margin:5px 0 12px;border:1px solid #aaa;border-radius:5px}
+  .help{font-size:11pt;color:#445}
+  @media(max-width:700px){
+    header h1{font-size:16pt}.toolbar{justify-content:flex-start}
+    main{padding:6px}.table-wrap{max-height:62vh}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>CEJA DR. GERARDO CAMELO MADEIRA</h1>
+  <div class="sub">Sistema de Monitoramento de Frequência Diária / Atendimento</div>
+</header>
+
+<div class="toolbar">
+  <label>Ano:
+    <select id="year"></select>
+  </label>
+  <button class="btn" id="saveAll">Salvar alterações</button>
+  <button class="btn secondary" id="exportCsv">Exportar dia (CSV)</button>
+  <button class="btn secondary" id="firebaseBtn">Configurar sincronização</button>
+  <span id="status" class="status">Modo local: alterações salvas neste dispositivo.</span>
+</div>
+
+<div class="areas" id="areas"></div>
+<div class="months" id="months"></div>
+<div class="days" id="days"></div>
+
+<main>
+  <section class="panel">
+    <div class="panel-title" id="title"></div>
+    <div class="summary">
+      <span>Alunos atendidos no dia: <strong id="count">0</strong></span>
+      <span>Linhas preenchidas: <strong id="filled">0</strong></span>
+      <span>Área: <strong id="areaLabel"></strong></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="ord">ORD.</th>
+            <th>ESTUDANTE</th>
+            <th class="mat">MAT.</th>
+            <th class="nivel">NÍVEL</th>
+            <th class="comp">COMPONENTE CURRICULAR</th>
+            <th class="prof">PROFESSOR</th>
+            <th class="atividade">ATIVIDADE REALIZADA</th>
+            <th class="atendeu">ATENDIMENTO</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="footer-note">
+      Modelo baseado no documento “ATENDIMENTO DIÁRIO”: ORD., ESTUDANTE, MAT., NÍVEL,
+      COMPONENTE CURRICULAR, PROFESSOR e ATIVIDADE REALIZADA. O campo ATENDIMENTO foi
+      acrescentado para permitir a contagem automática dos alunos atendidos.
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <h2>Sincronização em tempo real</h2>
+    <p>Para que vários profissionais da escola vejam e editem os mesmos dados em tempo real,
+    este HTML usa Firebase Realtime Database. Cole abaixo a configuração do seu projeto Firebase.</p>
+    <label>apiKey<input id="apiKey"></label>
+    <label>authDomain<input id="authDomain"></label>
+    <label>databaseURL<input id="databaseURL"></label>
+    <label>projectId<input id="projectId"></label>
+    <label>storageBucket<input id="storageBucket"></label>
+    <label>messagingSenderId<input id="messagingSenderId"></label>
+    <label>appId<input id="appId"></label>
+    <p class="help">A configuração web do Firebase não é uma senha. A proteção dos dados deve ser feita nas regras do Realtime Database e, de preferência, com autenticação dos profissionais.</p>
+    <button class="btn" id="connect">Conectar</button>
+    <button class="btn secondary" id="closeModal">Fechar</button>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+const AREAS=[
+ "LINGUAGENS",
+ "CIÊNCIAS DA NATUREZA E MATEMÁTICA",
+ "CIÊNCIAS HUMANAS"
+];
+const MONTHS=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+const KEY="ceja_frequencia_v1";
+let state=JSON.parse(localStorage.getItem(KEY)||"{}");
+let area=AREAS[0], month=0, day=1, db=null, syncing=false, unsubscribe=null;
+
+const $=id=>document.getElementById(id);
+const yearSel=$("year");
+const now=new Date();
+for(let y=2024;y<=2035;y++){let o=document.createElement("option");o.value=y;o.textContent=y;if(y===now.getFullYear())o.selected=true;yearSel.appendChild(o)}
+
+function daysInMonth(){return new Date(Number(yearSel.value),month+1,0).getDate()}
+function path(){return `${yearSel.value}/${area}/${String(month+1).padStart(2,"0")}/${String(day).padStart(2,"0")}`}
+function ensure(){
+  if(!state[path()]) state[path()]=Array.from({length:120},(_,i)=>({
+    ord:i+1, estudante:"", mat:"", nivel:"", componente:"", professor:"", atividade:"", atendeu:false
+  }));
+  if(state[path()].length<120){
+    for(let i=state[path()].length;i<120;i++) state[path()].push({ord:i+1,estudante:"",mat:"",nivel:"",componente:"",professor:"",atividade:"",atendeu:false});
+  }
+}
+function saveLocal(){localStorage.setItem(KEY,JSON.stringify(state))}
+function renderAreas(){
+  $("areas").innerHTML="";
+  AREAS.forEach(a=>{let b=document.createElement("button");b.className="area"+(a===area?" active":"");b.textContent=a;b.onclick=()=>{area=a;renderAll()};$("areas").appendChild(b)})
+}
+function renderMonths(){
+  $("months").innerHTML="";
+  MONTHS.forEach((m,i)=>{let b=document.createElement("button");b.className="month"+(i===month?" active":"");b.textContent=m;b.onclick=()=>{month=i;day=Math.min(day,daysInMonth());renderAll()};$("months").appendChild(b)})
+}
+function renderDays(){
+  $("days").innerHTML="";
+  for(let d=1;d<=daysInMonth();d++){let b=document.createElement("button");b.className="day"+(d===day?" active":"");b.textContent=String(d).padStart(2,"0");b.onclick=()=>{day=d;renderAll()};$("days").appendChild(b)}
+}
+function renderTable(){
+  ensure();
+  const rows=state[path()];
+  $("tbody").innerHTML="";
+  rows.forEach((r,i)=>{
+    let tr=document.createElement("tr"); if(r.atendeu)tr.classList.add("present");
+    tr.innerHTML=`
+      <td class="center">${i+1}</td>
+      <td><input data-k="estudante" value="${esc(r.estudante)}"></td>
+      <td><input class="mat" data-k="mat" value="${esc(r.mat)}"></td>
+      <td><input data-k="nivel" value="${esc(r.nivel)}"></td>
+      <td><input data-k="componente" value="${esc(r.componente)}"></td>
+      <td><input data-k="professor" value="${esc(r.professor)}"></td>
+      <td><input data-k="atividade" value="${esc(r.atividade)}"></td>
+      <td class="center"><input class="att" type="checkbox" ${r.atendeu?"checked":""}></td>`;
+    tr.querySelectorAll("input[data-k]").forEach(inp=>inp.addEventListener("input",e=>{
+      rows[i][e.target.dataset.k]=e.target.value; saveLocal(); updateSummary(); queueSync();
+    }));
+    tr.querySelector(".att").addEventListener("change",e=>{
+      rows[i].atendeu=e.target.checked;tr.classList.toggle("present",r.atendeu);saveLocal();updateSummary();queueSync();
+    });
+    $("tbody").appendChild(tr);
+  });
+  updateSummary();
+}
+function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll('"',"&quot;").replaceAll("<","&lt;").replaceAll(">","&gt;")}
+function updateSummary(){
+  ensure();let rows=state[path()];
+  $("count").textContent=rows.filter(r=>r.atendeu).length;
+  $("filled").textContent=rows.filter(r=>r.estudante||r.mat||r.nivel||r.componente||r.professor||r.atividade).length;
+  $("areaLabel").textContent=area;
+  $("title").textContent=`FREQUÊNCIA DIÁRIA: ${area} — ${MONTHS[month]} — DIA ${String(day).padStart(2,"0")} — ${yearSel.value}`;
+}
+function renderAll(){renderAreas();renderMonths();renderDays();renderTable()}
+function setStatus(t,ok=true){$("status").textContent=t;$("status").className="status "+(ok?"ok":"err")}
+let syncTimer=null;
+function queueSync(){if(!db)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncCurrent,350)}
+async function syncCurrent(){
+  if(!db)return;
+  try{syncing=true;await set(ref(db,"frequencia/"+path()),state[path()]);setStatus("Sincronizado em tempo real.");}
+  catch(e){setStatus("Erro ao sincronizar: "+e.message,false)}
+  finally{syncing=false}
+}
+function listen(){
+  if(!db)return;
+  if(unsubscribe)unsubscribe();
+  unsubscribe=onValue(ref(db,"frequencia/"+path()),snap=>{
+    if(syncing)return;
+    const v=snap.val();
+    if(v){state[path()]=v;saveLocal();renderTable();setStatus("Dados atualizados do servidor em tempo real.")}
+  });
+}
+$("saveAll").onclick=()=>{saveLocal();syncCurrent();setStatus(db?"Alterações salvas e enviadas.":"Alterações salvas neste dispositivo.")};
+$("exportCsv").onclick=()=>{
+  ensure();
+  const rows=state[path()];
+  const head=["ORD.","ESTUDANTE","MAT.","NÍVEL","COMPONENTE CURRICULAR","PROFESSOR","ATIVIDADE REALIZADA","ATENDIMENTO"];
+  const csv=[head,...rows.map(r=>[r.ord,r.estudante,r.mat,r.nivel,r.componente,r.professor,r.atividade,r.atendeu?"SIM":"NÃO"])]
+    .map(row=>row.map(x=>`"${String(x??"").replaceAll('"','""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`frequencia_${yearSel.value}_${month+1}_${day}_${area.replaceAll(" ","_")}.csv`;a.click();
+};
+yearSel.onchange=()=>{day=Math.min(day,daysInMonth());renderAll();listen()};
+$("firebaseBtn").onclick=()=>{$("modal").classList.add("open")};
+$("closeModal").onclick=()=>{$("modal").classList.remove("open")};
+$("connect").onclick=async()=>{
+  try{
+    const config={apiKey:$("apiKey").value.trim(),authDomain:$("authDomain").value.trim(),databaseURL:$("databaseURL").value.trim(),projectId:$("projectId").value.trim(),storageBucket:$("storageBucket").value.trim(),messagingSenderId:$("messagingSenderId").value.trim(),appId:$("appId").value.trim()};
+    const app=initializeApp(config);db=getDatabase(app);$("modal").classList.remove("open");setStatus("Conectado ao Firebase. Sincronização ativa.");listen();syncCurrent();
+  }catch(e){setStatus("Não foi possível conectar: "+e.message,false)}
+};
+renderAll();
+</script>
+</body>
+</html>
