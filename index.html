@@ -618,20 +618,18 @@ function iniciar(){
 })();
 </script>
 
-<!-- SDK do Firebase Firestore -->
+<!-- INTEGRACAO COMPLETA COM FIRESTORE EM TEMPO REAL -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { 
     getFirestore, 
-    collection, 
-    addDoc, 
-    getDocs, 
     doc, 
-    updateDoc, 
-    deleteDoc 
+    setDoc, 
+    getDoc, 
+    onSnapshot 
   } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-  // Configuração oficial do teu projeto
+  // Configuração oficial do teu projeto 'atendimentos-ceja'
   const firebaseConfig = {
     apiKey: "AIzaSyCg9l7axov73MQUI9QiIG3NBWw8SWrPfX4",
     authDomain: "atendimentos-ceja.firebaseapp.com",
@@ -642,52 +640,74 @@ function iniciar(){
     measurementId: "G-RFYKW2XWBW"
   };
 
-  // Inicializa o Firebase e o Firestore
+  // Inicializa o Firebase
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // Funções Globais para Salvar, Carregar, Atualizar e Excluir
-  window.salvarAtendimento = async function(dados) {
-    try {
-      const docRef = await addDoc(collection(db, "atendimentos"), dados);
-      console.log("Sucesso ao salvar. ID:", docRef.id);
-      return docRef.id;
-    } catch (erro) {
-      console.error("Erro ao salvar:", erro);
+  // Captura todo o armazenamento do sistema
+  function obterEstadoCompleto() {
+    const dados = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const chave = localStorage.key(i);
+      dados[chave] = localStorage.getItem(chave);
     }
-  };
+    return JSON.stringify(dados);
+  }
 
-  window.carregarAtendimentos = async function() {
+  // Aplica os dados recebidos da nuvem no sistema
+  function aplicarEstadoNuvem(jsonDados) {
+    if (!jsonDados) return;
     try {
-      const querySnapshot = await getDocs(collection(db, "atendimentos"));
-      const lista = [];
-      querySnapshot.forEach((doc) => {
-        lista.push({ id: doc.id, ...doc.data() });
+      const dados = JSON.parse(jsonDados);
+      Object.keys(dados).forEach(chave => {
+        localStorage.setItem(chave, dados[chave]);
       });
-      return lista;
+      if (typeof window.renderizarTudo === 'function') {
+        window.renderizarTudo();
+      }
+    } catch (e) {
+      console.error("Erro ao aplicar dados da nuvem:", e);
+    }
+  }
+
+  // Redefine 'salvarLocal' para guardar na nuvem (Firestore)
+  window.salvarLocal = async function() {
+    try {
+      const estado = obterEstadoCompleto();
+      await setDoc(doc(db, "sistema", "atendimentos_gerais"), {
+        conteudo: estado,
+        atualizadoEm: new Date().toISOString()
+      });
+      console.log("Salvo e sincronizado na nuvem!");
     } catch (erro) {
-      console.error("Erro ao carregar:", erro);
+      console.error("Erro ao salvar na nuvem:", erro);
     }
   };
 
-  window.atualizarAtendimento = async function(idDoc, novosDados) {
+  // Redefine 'carregarLocal' para buscar da nuvem
+  window.carregarLocal = async function() {
     try {
-      await updateDoc(doc(db, "atendimentos", idDoc), novosDados);
-      console.log("Atualizado com sucesso!");
+      const docSnap = await getDoc(doc(db, "sistema", "atendimentos_gerais"));
+      if (docSnap.exists()) {
+        aplicarEstadoNuvem(docSnap.data().conteudo);
+        console.log("Dados da nuvem carregados!");
+      }
     } catch (erro) {
-      console.error("Erro ao atualizar:", erro);
+      console.error("Erro ao carregar da nuvem:", erro);
     }
   };
 
-  window.excluirAtendimento = async function(idDoc) {
-    try {
-      await deleteDoc(doc(db, "atendimentos", idDoc));
-      console.log("Excluído com sucesso!");
-    } catch (erro) {
-      console.error("Erro ao excluir:", erro);
+  // ESCUTA EM TEMPO REAL: Qualquer alteração num aparelho atualiza os outros imediatamente
+  onSnapshot(doc(db, "sistema", "atendimentos_gerais"), (docSnap) => {
+    if (docSnap.exists()) {
+      const estadoNuvem = docSnap.data().conteudo;
+      const estadoLocal = obterEstadoCompleto();
+      if (estadoNuvem && estadoNuvem !== estadoLocal) {
+        aplicarEstadoNuvem(estadoNuvem);
+      }
     }
-  };
+  });
+
+  // Tenta carregar os dados ao iniciar
+  window.carregarLocal();
 </script>
-
-</body>
-</html>
