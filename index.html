@@ -617,5 +617,77 @@ function iniciar(){
   else $("loginPass").focus();
 })();
 </script>
+
+<!-- SDK do Firebase Firestore -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { 
+    getFirestore, 
+    collection, 
+    addDoc, 
+    getDocs, 
+    doc, 
+    updateDoc, 
+    deleteDoc 
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+  // Configuração oficial do teu projeto
+  const firebaseConfig = {
+    apiKey: "AIzaSyCg9l7axov73MQUI9QiIG3NBWw8SWrPfX4",
+    authDomain: "atendimentos-ceja.firebaseapp.com",
+    projectId: "atendimentos-ceja",
+    storageBucket: "atendimentos-ceja.firebasestorage.app",
+    messagingSenderId: "330609197724",
+    appId: "1:330609197724:web:45b030f4c6f1cc5faf6359",
+    measurementId: "G-RFYKW2XWBW"
+  };
+
+  // Inicializa o Firebase e o Firestore
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Funções Globais para Salvar, Carregar, Atualizar e Excluir
+  window.salvarAtendimento = async function(dados) {
+    try {
+      const docRef = await addDoc(collection(db, "atendimentos"), dados);
+      console.log("Sucesso ao salvar. ID:", docRef.id);
+      return docRef.id;
+    } catch (erro) {
+      console.error("Erro ao salvar:", erro);
+    }
+  };
+
+  window.carregarAtendimentos = async function() {
+    try {
+      const querySnapshot = await getDocs(collection(db, "atendimentos"));
+      const lista = [];
+      querySnapshot.forEach((doc) => {
+        lista.push({ id: doc.id, ...doc.data() });
+      });
+      return lista;
+    } catch (erro) {
+      console.error("Erro ao carregar:", erro);
+    }
+  };
+
+  window.atualizarAtendimento = async function(idDoc, novosDados) {
+    try {
+      await updateDoc(doc(db, "atendimentos", idDoc), novosDados);
+      console.log("Atualizado com sucesso!");
+    } catch (erro) {
+      console.error("Erro ao atualizar:", erro);
+    }
+  };
+
+  window.excluirAtendimento = async function(idDoc) {
+    try {
+      await deleteDoc(doc(db, "atendimentos", idDoc));
+      console.log("Excluído com sucesso!");
+    } catch (erro) {
+      console.error("Erro ao excluir:", erro);
+    }
+  };
+</script>
+
 </body>
 </html>
