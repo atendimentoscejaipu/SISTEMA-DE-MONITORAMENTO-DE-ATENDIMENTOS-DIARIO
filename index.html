@@ -133,7 +133,7 @@
     <div class="sub">Monitoramento de Frequência Diária / Atendimento</div>
 
     <label>E-mail institucional
-      <input id="loginEmail" type="email" autocomplete="username" placeholder="atendimentoscejaipu@gmail.com">
+      <input id="loginEmail" type="email" autocomplete="username" value="atendimentoscejaipu@gmail.com" readonly aria-readonly="true">
     </label>
     <label>Senha
       <input id="loginPass" type="password" autocomplete="current-password">
@@ -163,7 +163,7 @@
 <div class="toolbar">
   <button class="btn" id="saveAll">Salvar alterações</button>
   <button class="btn secondary" id="exportCsv">Exportar dia (CSV)</button>
-  <button class="btn secondary" id="driveBtn">Google Drive</button>
+  <button class="btn secondary" id="cloudBtn">Armazenamento em nuvem</button>
   <span id="status" class="status">Modo local: alterações salvas neste aparelho.</span>
 </div>
 
@@ -206,36 +206,33 @@
   </section>
 </main>
 
-<!-- ============ CONFIGURAÇÃO DO GOOGLE DRIVE ============ -->
+<!-- ============ CONFIGURAÇÃO DO ARMAZENAMENTO EM NUVEM ============ -->
 <div class="modal" id="modal">
   <div class="box">
-    <h2>Armazenamento no Google Drive</h2>
-    <p class="help">Os dados ficam em um único arquivo no Drive da conta
-      <strong>atendimentoscejaipu@gmail.com</strong>. Todos que entram no sistema leem e gravam
-      nesse mesmo arquivo, e a tela se atualiza sozinha a cada poucos segundos.</p>
-
-    <label>ID do cliente OAuth (Client ID)
-      <input id="clientId" placeholder="000000000000-xxxxxxxx.apps.googleusercontent.com">
+    <h2>Armazenamento compartilhado em tempo real</h2>
+    <p class="help">Esta versão usa <strong>Firebase Realtime Database</strong>. Depois de configurar o projeto da escola, todos os aparelhos autorizados trabalham sobre a mesma base de dados e recebem alterações automaticamente.</p>
+    <label>Configuração do Firebase (JSON)
+      <textarea id="firebaseConfig" rows="9" style="width:100%;font-family:monospace;font-size:10pt;padding:8px;border:1px solid #aaa;border-radius:5px" placeholder='{"apiKey":"...","authDomain":"...","databaseURL":"https://...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
     </label>
-    <button class="btn" id="driveConnect">Conectar ao Drive</button>
-    <button class="btn secondary" id="driveDisconnect">Desconectar</button>
+    <button class="btn" id="firebaseConnect">Conectar e sincronizar</button>
+    <button class="btn secondary" id="firebaseDisconnect">Desconectar</button>
     <button class="btn secondary" id="closeModal">Fechar</button>
-
-    <h3 style="font-size:12pt;margin-bottom:4px">Como obter o ID do cliente (uma única vez)</h3>
+    <h3 style="font-size:12pt;margin-bottom:4px">Configuração única</h3>
     <ol>
-      <li>Entre em <strong>console.cloud.google.com</strong> com a conta da escola e crie um projeto.</li>
-      <li>Em “APIs e serviços”, ative a <strong>Google Drive API</strong>.</li>
-      <li>Em “Credenciais”, crie um <strong>ID do cliente OAuth</strong> do tipo <strong>Aplicativo da Web</strong>.</li>
-      <li>Em “Origens JavaScript autorizadas”, informe o endereço onde este arquivo será publicado
-        (por exemplo <strong>https://suaescola.github.io</strong>).</li>
-      <li>Copie o ID gerado e cole no campo acima.</li>
+      <li>Crie um projeto no <strong>Firebase Console</strong>.</li>
+      <li>Adicione um aplicativo da Web e copie a configuração.</li>
+      <li>Ative <strong>Authentication → Anonymous</strong>.</li>
+      <li>Crie o <strong>Realtime Database</strong>.</li>
+      <li>Use regras que exijam autenticação, por exemplo: <code>{&quot;rules&quot;:{&quot;.read&quot;:&quot;auth != null&quot;,&quot;.write&quot;:&quot;auth != null&quot;}}</code>.</li>
+      <li>Cole aqui o JSON da configuração e conecte. A configuração fica salva neste navegador para não precisar colar novamente.</li>
     </ol>
-    <p class="help"><strong>Importante:</strong> o Google só libera o acesso quando a página está publicada
-      em um endereço https. Abrindo o arquivo direto do computador (file://) o sistema funciona,
-      mas apenas no modo local.</p>
+    <p class="help"><strong>Importante:</strong> o HTML pode ser publicado em GitHub Pages, Netlify, Vercel, servidor da escola ou outro endereço HTTPS. O banco compartilhado é o Firebase; o arquivo HTML sozinho não consegue hospedar um banco persistente para vários usuários.</p>
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script>
 /* =========================================================
    1. ACESSO
@@ -256,9 +253,9 @@ function abrirSistema(email){
   iniciar();
 }
 async function entrar(){
-  const email=$("loginEmail").value.trim().toLowerCase();
+  const email=EMAIL_AUTORIZADO;
   const senha=$("loginPass").value;
-  if(!email||!senha){$("loginMsg").textContent="Informe o e-mail e a senha.";return}
+  if(!senha){$("loginMsg").textContent="Informe a senha.";return}
   const h=await sha256(email+"::"+senha);
   if(h!==HASH_ACESSO){$("loginMsg").textContent="E-mail ou senha incorretos.";return}
   $("loginMsg").textContent="";
@@ -271,7 +268,6 @@ $("loginPass").addEventListener("keydown",e=>{if(e.key==="Enter")entrar()});
 $("loginEmail").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginPass").focus()});
 $("logout").onclick=()=>{
   localStorage.removeItem(SESSAO);sessionStorage.removeItem(SESSAO);
-  if(token)google.accounts.oauth2.revoke(token,()=>{});
   location.reload();
 };
 
@@ -495,133 +491,95 @@ function renderAll(){renderViews();renderYears();renderAreas();renderMonths();re
 function setStatus(t,ok=true){$("status").textContent=t;$("status").className="status "+(ok?"ok":"err")}
 
 /* =========================================================
-   4. GOOGLE DRIVE
+   4. FIREBASE REALTIME DATABASE
    ========================================================= */
-const ARQUIVO="ceja_frequencia_dados.json";
-const ESCOPO="https://www.googleapis.com/auth/drive.file";
-const CID_KEY="ceja_client_id";
-let token=null, fileId=null, tokenClient=null, ultimaModificacao=null, enviando=false, timerEnvio=null, timerLeitura=null;
+const FIREBASE_KEY="ceja_firebase_config_v1";
+let firebaseApp=null, firebaseDb=null, firebaseUser=null, firebaseReady=false, cloudListener=null, enviando=false, timerEnvio=null;
 
-function carregarGis(){
-  return new Promise((ok,erro)=>{
-    if(window.google&&google.accounts&&google.accounts.oauth2)return ok();
-    const s=document.createElement("script");
-    s.src="https://accounts.google.com/gsi/client";s.async=true;
-    s.onload=ok;s.onerror=()=>erro(new Error("não foi possível carregar o Google"));
-    document.head.appendChild(s);
-  });
+function lerFirebaseConfig(){
+  try{return JSON.parse(localStorage.getItem(FIREBASE_KEY)||"null")}catch(e){return null}
 }
-async function api(url,opt={}){
-  const r=await fetch(url,{...opt,headers:{Authorization:"Bearer "+token,...(opt.headers||{})}});
-  if(r.status===401){token=null;throw new Error("sessão do Drive expirou")}
-  if(!r.ok)throw new Error("Drive respondeu "+r.status);
-  return r;
+function normalizarConfig(c){
+  return c && c.apiKey && c.authDomain && c.databaseURL && c.projectId && c.appId ? c : null;
 }
-async function localizarArquivo(){
-  const q=encodeURIComponent(`name='${ARQUIVO}' and trashed=false`);
-  const r=await api(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)`);
-  const j=await r.json();
-  if(j.files&&j.files.length){fileId=j.files[0].id;ultimaModificacao=j.files[0].modifiedTime;return true}
-  return false;
-}
-async function criarArquivo(){
-  const meta={name:ARQUIVO,mimeType:"application/json"};
-  const corpo=new FormData();
-  corpo.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
-  corpo.append("file",new Blob([JSON.stringify(base)],{type:"application/json"}));
-  const r=await api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,modifiedTime",
-    {method:"POST",body:corpo});
-  const j=await r.json();fileId=j.id;ultimaModificacao=j.modifiedTime;
-}
-async function baixar(){
-  const r=await api(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
-  return await r.json();
-}
-function mesclar(remoto){
-  if(!remoto||!remoto.dados)return false;
-  let mudou=false;
-  for(const p in remoto.dados){
-    const tr=remoto.marcas?.[p]||0, tl=base.marcas?.[p]||0;
-    if(tr>tl){base.dados[p]=remoto.dados[p];base.marcas[p]=tr;mudou=true}
-  }
-  if(mudou)salvarLocal();
-  return mudou;
-}
-async function enviar(){
-  if(!token||!fileId||enviando)return;
+function firebasePathKey(p){return encodeURIComponent(p).replaceAll(".","%2E");}
+function firebasePathDecode(k){return decodeURIComponent(k);}
+
+async function conectarFirebase(config,silencioso=false){
   try{
-    enviando=true;
-    const remoto=await baixar();          // funde antes de gravar, para não apagar o trabalho dos colegas
-    mesclar(remoto);
-    const r=await api(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=modifiedTime`,
-      {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(base)});
-    ultimaModificacao=(await r.json()).modifiedTime;
-    setStatus("Salvo no Drive às "+new Date().toLocaleTimeString("pt-BR"));
-  }catch(e){setStatus("Não foi possível salvar no Drive: "+e.message,false)}
-  finally{enviando=false}
-}
-function agendarEnvio(){if(!token)return;clearTimeout(timerEnvio);timerEnvio=setTimeout(enviar,1200)}
-async function verificarNovidades(){
-  if(!token||!fileId||enviando)return;
-  try{
-    const r=await api(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`);
-    const m=(await r.json()).modifiedTime;
-    if(m===ultimaModificacao)return;
-    ultimaModificacao=m;
-    if(mesclar(await baixar())){
-      const foco=document.activeElement;
-      const ativo=foco&&foco.dataset&&foco.dataset.k?{k:foco.dataset.k,linha:foco.closest("tr").rowIndex}:null;
-      renderTable();
-      if(ativo){
-        const tr=$("tbody").rows[ativo.linha-1];
-        if(tr){const el=tr.querySelector(`[data-k="${ativo.k}"]`);if(el)el.focus()}
-      }
-      setStatus("Atualizado com o trabalho dos colegas.");
-    }
-  }catch(e){setStatus("Sem conexão com o Drive: "+e.message,false)}
-}
-async function conectarDrive(cid,silencioso=false){
-  try{
+    config=normalizarConfig(config);
+    if(!config){setStatus("Configuração do Firebase incompleta.",false);if(!silencioso)alert("Cole a configuração JSON completa do Firebase.");return;}
     if(location.protocol==="file:"){
-      setStatus("Publique o arquivo em um endereço https para usar o Drive.",false);
-      if(!silencioso)alert("O Google não autoriza o acesso quando a página é aberta direto do computador (file://). Publique o arquivo em um endereço https e tente de novo.");
+      setStatus("Publique em HTTPS para usar a sincronização online.",false);
+      if(!silencioso)alert("Para sincronizar entre vários aparelhos, publique o HTML em um endereço HTTPS.");
       return;
     }
-    setStatus("Conectando ao Drive…");
-    await carregarGis();
-    tokenClient=google.accounts.oauth2.initTokenClient({
-      client_id:cid,scope:ESCOPO,
-      callback:async resp=>{
-        if(resp.error){setStatus("Acesso ao Drive negado.",false);return}
-        token=resp.access_token;
-        localStorage.setItem(CID_KEY,cid);
-        $("modal").classList.remove("open");
-        try{
-          if(!await localizarArquivo())await criarArquivo();
-          mesclar(await baixar());
-          renderTable();
-          setStatus("Conectado ao Drive. Os dados são compartilhados com a escola.");
-          clearInterval(timerLeitura);
-          timerLeitura=setInterval(verificarNovidades,7000);
-          enviar();
-        }catch(e){setStatus("Erro ao abrir o arquivo no Drive: "+e.message,false)}
-      }
-    });
-    tokenClient.requestAccessToken({prompt:silencioso?"":"consent"});
-  }catch(e){setStatus("Não foi possível conectar: "+e.message,false)}
+    setStatus("Conectando à nuvem…");
+    if(!firebaseApp){firebaseApp=firebase.initializeApp(config);firebaseDb=firebase.database();}
+    await firebase.auth().signInAnonymously();
+    firebaseUser=firebase.auth().currentUser;
+    firebaseReady=true;
+    localStorage.setItem(FIREBASE_KEY,JSON.stringify(config));
+    $("modal").classList.remove("open");
+    const snap=await firebaseDb.ref("ceja/dados").once("value");
+    const remoto=snap.val();
+    if(remoto){
+      let mudou=false;
+      Object.entries(remoto).forEach(([k,v])=>{
+        const p=firebasePathDecode(k);
+        const tr=v?.marca||0, tl=base.marcas?.[p]||0;
+        if(tr>tl){base.dados[p]=v.rows||[];base.marcas[p]=tr;mudou=true;}
+      });
+      if(mudou)salvarLocal();
+    }
+    if(cloudListener)cloudListener();
+    const ref=firebaseDb.ref("ceja/dados");
+    const handler=snap=>{
+      const val=snap.val()||{};
+      let mudou=false;
+      Object.entries(val).forEach(([k,v])=>{
+        const p=firebasePathDecode(k);
+        const tr=v?.marca||0, tl=base.marcas?.[p]||0;
+        if(tr>tl){base.dados[p]=v.rows||[];base.marcas[p]=tr;mudou=true;}
+      });
+      if(mudou){salvarLocal();renderAll();setStatus("Atualizado em tempo real com a equipe.");}
+    };
+    ref.on("value",handler);
+    cloudListener=()=>ref.off("value",handler);
+    setStatus("Sincronização em tempo real ativa.");
+    await enviar();
+  }catch(e){firebaseReady=false;setStatus("Falha na sincronização: "+(e.message||e),false);if(!silencioso)alert("Não foi possível conectar ao Firebase. Verifique a configuração e as regras do Realtime Database.");}
 }
-$("driveBtn").onclick=()=>{$("clientId").value=localStorage.getItem(CID_KEY)||"";$("modal").classList.add("open")};
-$("closeModal").onclick=()=>$("modal").classList.remove("open");
-$("driveConnect").onclick=()=>{
-  const cid=$("clientId").value.trim();
-  if(!cid){alert("Cole o ID do cliente OAuth.");return}
-  conectarDrive(cid);
+
+async function enviar(){
+  if(!firebaseReady||!firebaseDb||enviando)return;
+  const p=caminho(), marca=base.marcas?.[p]||Date.now(), rows=garantir(p);
+  try{
+    enviando=true;
+    await firebaseDb.ref("ceja/dados/"+firebasePathKey(p)).set({rows,marca,atualizadoEm:firebase.database.ServerValue.TIMESTAMP});
+    setStatus("Salvo e compartilhado em tempo real às "+new Date().toLocaleTimeString("pt-BR"));
+  }catch(e){setStatus("Não foi possível sincronizar: "+e.message,false)}
+  finally{enviando=false}
+}
+function agendarEnvio(){
+  clearTimeout(timerEnvio);
+  if(firebaseReady)timerEnvio=setTimeout(enviar,500);
+}
+
+$("cloudBtn").onclick=()=>{
+  const cfg=lerFirebaseConfig();
+  $("firebaseConfig").value=cfg?JSON.stringify(cfg,null,2):"";
+  $("modal").classList.add("open");
 };
-$("driveDisconnect").onclick=()=>{
-  if(token)google.accounts.oauth2.revoke(token,()=>{});
-  token=null;fileId=null;clearInterval(timerLeitura);
-  $("modal").classList.remove("open");
-  setStatus("Desconectado do Drive. Modo local.");
+$("closeModal").onclick=()=>$("modal").classList.remove("open");
+$("firebaseConnect").onclick=()=>{
+  let cfg;try{cfg=JSON.parse($("firebaseConfig").value)}catch(e){alert("O JSON da configuração não é válido.");return;}
+  conectarFirebase(cfg);
+};
+$("firebaseDisconnect").onclick=()=>{
+  if(cloudListener)cloudListener();
+  cloudListener=null;firebaseReady=false;
+  setStatus("Desconectado da nuvem. Modo local.");
 };
 
 /* =========================================================
@@ -648,15 +606,15 @@ function iniciar(){
   if(iniciado)return;iniciado=true;
   carregarLocal();
   renderAll();
-  const cid=localStorage.getItem(CID_KEY);
-  if(cid)conectarDrive(cid,true);
+  const cfg=lerFirebaseConfig();
+  if(cfg)conectarFirebase(cfg,true);
 }
 
 /* sessão já aberta neste aparelho */
 (function(){
   const s=localStorage.getItem(SESSAO)||sessionStorage.getItem(SESSAO);
   if(s===EMAIL_AUTORIZADO){$("keep").checked=!!localStorage.getItem(SESSAO);abrirSistema(s)}
-  else $("loginEmail").focus();
+  else $("loginPass").focus();
 })();
 </script>
 </body>
